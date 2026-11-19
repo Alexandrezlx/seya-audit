@@ -56,7 +56,7 @@ select{min-height:56px;font-weight:700}
  font:700 15px Mulish,sans-serif;color:var(--txt);cursor:pointer;padding:6px}
 .sts .st:last-child:nth-child(odd){grid-column:1/-1;min-height:64px}
 .st.on{border-color:var(--vert);background:var(--clair);box-shadow:inset 0 0 0 2px var(--vert)}
-.st.on.v{border-color:var(--sv)}.st.on.j{border-color:var(--sj)}.st.on.r{border-color:var(--sr)}.st.on.g,.st.on.a{border-color:var(--sg)}
+.st.on.v{border-color:var(--sv)}.st.on.j{border-color:var(--sj)}.st.on.r{border-color:var(--or)}.st.on.g{border-color:var(--sr)}.st.on.a{border-color:var(--sg)}
 .pt{background:#fff;border:2px solid var(--filet);border-radius:16px;padding:12px 14px;margin:12px 0}
 .pt .lab{font-weight:700;color:var(--vert);font-size:18px}
 .pt .tag{font-size:13px;color:var(--sec);font-weight:400}
@@ -98,6 +98,11 @@ td.n,th.n{text-align:center}
 .nav2{display:flex;gap:8px}.nav2 .btn{flex:1}
 .logo{height:64px;display:block;margin:6px 0 12px}
 .ghost{color:var(--sec);font-size:14px}
+.gauge{position:relative;height:38px;margin-top:10px}
+.gauge .track{position:absolute;left:0;right:0;top:16px;height:14px;border-radius:7px;background:linear-gradient(90deg,#D32F2F,#EB5C37 33%,#F2B01E 66%,#2E9E57)}
+.gauge .mk{position:absolute;top:2px;width:6px;height:40px;margin-left:-3px;border-radius:3px;background:var(--vert);box-shadow:0 0 0 2px #fff}
+.gscale{display:flex;justify-content:space-between;color:var(--sec);font-size:13px}
+.gnote{font-size:15px;color:var(--sec)}.gnote b{font-size:34px;color:var(--vert)}
 </style>
 </head>
 <body>

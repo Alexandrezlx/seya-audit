@@ -1,6 +1,6 @@
 // Service worker : met l'application en cache pour qu'elle marche sans réseau.
 // Pour forcer une mise à jour chez l'utilisateur, changer le numéro de version ci-dessous.
-const VERSION = 'seya-audit-v2';
+const VERSION = 'seya-audit-v4';
 const FILES = [
   './', 'index.html', 'app.js', 'manifest.webmanifest',
   'lib/jspdf.umd.min.js',

@@ -14,8 +14,8 @@ const ls = { get: k => { try { return localStorage.getItem(k); } catch { return 
 const ST = {
   v: { label: 'Conforme', long: 'Conforme / bon état', color: '#2E9E57' },
   j: { label: 'À surveiller', long: 'À surveiller', color: '#F2B01E' },
-  r: { label: 'Défaut', long: 'Défaut / prioritaire', color: '#D32F2F' },
-  g: { label: 'Non présent', long: 'Manquant (appareillage important absent)', color: '#9AA29E' },
+  r: { label: 'Défaut', long: 'Défaut / prioritaire', color: '#EB5C37' },
+  g: { label: 'Non présent', long: 'Manquant (appareillage important absent)', color: '#D32F2F' },
   a: { label: 'Absent', long: 'Absent du site (non compté)', color: '#9AA29E' }
 };
 const ORDER = ['v', 'j', 'r', 'g'];          // états comptés dans le bilan
@@ -109,20 +109,23 @@ const freeUrls = () => { urls.forEach(u => URL.revokeObjectURL(u)); urls = []; }
 /* ---------- Statistiques ---------- */
 const effState = (a, p) => a.entries[p.id]?.s || 'g';
 function stats(a) {
-  const tot = { v: 0, j: 0, r: 0, g: 0, a: 0 }, fams = {}, reds = [], yel = [];
+  const tot = { v: 0, j: 0, r: 0, g: 0, a: 0 }, fams = {}, reds = [], yel = [], miss = [];
   for (const eq of a.equips) {
-    const R = [], Y = [];
+    const R = [], Y = [], G = [];
     for (const p of eq.pts) {
       if (p.info) continue;
       const s = effState(a, p); tot[s]++; if (s === 'a') continue;
       (fams[eq.fam] ||= { v: 0, j: 0, r: 0, g: 0 })[s]++;
       const o = a.entries[p.id]?.o || '';
-      if (s === 'r') R.push({ label: p.label, obs: o }); if (s === 'j') Y.push({ label: p.label, obs: o });
+      if (s === 'r') R.push({ label: p.label, obs: o }); if (s === 'j') Y.push({ label: p.label, obs: o }); if (s === 'g') G.push({ label: p.label, obs: o });
     }
-    if (R.length) reds.push({ eq: eq.name, pts: R }); if (Y.length) yel.push({ eq: eq.name, pts: Y });
+    if (R.length) reds.push({ eq: eq.name, pts: R }); if (Y.length) yel.push({ eq: eq.name, pts: Y }); if (G.length) miss.push({ eq: eq.name, pts: G });
   }
-  return { tot, n: tot.v + tot.j + tot.r + tot.g, fams, reds, yel };
+  return { tot, n: tot.v + tot.j + tot.r + tot.g, fams, reds, yel, miss };
 }
+// Note automatique /20 : conforme = 1, à surveiller = 0,5, défaut = 0,25, non présent = 0 ; les absents ne comptent pas.
+const score = S => S.n ? 20 * (S.tot.v + 0.5 * S.tot.j + 0.25 * S.tot.r) / S.n : null;
+const fmtScore = x => x == null ? '—' : x.toFixed(1).replace('.', ',');
 function progress(a) { let n = 0, d = 0; for (const eq of a.equips) for (const p of eq.pts) { if (p.info) continue; n++; if (a.entries[p.id]?.s) d++; } return { n, d }; }
 function eqDone(a, eq) { let n = 0, d = 0; for (const p of eq.pts) { if (p.info) continue; n++; if (a.entries[p.id]?.s) d++; } return { n, d }; }
 function touched(a, eq, photoCount) { return photoCount > 0 || eq.pts.some(p => a.entries[p.id]?.s || a.entries[p.id]?.o); }
@@ -342,6 +345,15 @@ acts.reopen = async () => {
 };
 
 /* ---------- Bilan ---------- */
+function processCard(a, S, ro) {
+  const sc = score(S);
+  return `<div class="pt"><div class="lab">État général du process <span class="tag">· note automatique</span></div>
+    <div class="gauge"><div class="track"></div>${sc == null ? '' : `<div class="mk" style="left:${sc * 5}%"></div>`}</div>
+    <div class="gscale"><span>0</span><span>10</span><span>20</span></div>
+    <div class="gnote"><b>${fmtScore(sc)}</b> / 20</div>
+    <p class="ghost">Calculée à partir des points saisis : conforme = 1, à surveiller = 0,5, défaut = 0,25, non présent = 0 ; les points absents ne comptent pas. Elle ne dépend pas de l'avis de l'auditeur.</p>
+    <textarea ${ro ? 'disabled' : ''} data-inp="gobs" data-key="etatProcess" placeholder="Commentaire…">${esc(a.etatProcess.o || '')}</textarea></div>`;
+}
 function stateRow(key, label, ro) {
   const v = cur[key];
   return `<div class="pt"><div class="lab">${label}</div><div class="sts">${ORDER.map(s => `<button class="st ${s} ${v.s === s ? 'on' : ''}" ${ro ? 'disabled' : ''} data-act="gstate" data-key="${key}" data-s="${s}">${face(s, 34)}<span>${ST[s].label}</span></button>`).join('')}</div>
@@ -359,13 +371,16 @@ async function vBilan() {
     <div class="big">${ORDER.map(s => `<div class="k">${face(s, 34)}<div class="n">${S.tot[s]}</div><div class="l">${ST[s].label}</div><div class="p">${pct(s)} %</div></div>`).join('')}</div>
     <div class="stack">${ORDER.map(s => `<i style="flex:${S.tot[s]};background:${ST[s].color}"></i>`).join('')}</div>
     <div class="legend">${ORDER.map(s => `<span><i style="background:${ST[s].color}"></i>${ST[s].label} ${S.tot[s]}</span>`).join('')}</div>
+    <div class="stack"><i style="flex:${S.tot.v + S.tot.j};background:repeating-linear-gradient(135deg,#2E9E57 0 7px,#F2B01E 7px 14px)"></i><i style="flex:${S.tot.r + S.tot.g};background:repeating-linear-gradient(135deg,#D32F2F 0 7px,#EB5C37 7px 14px)"></i></div>
+    <div class="legend"><span>Conformes + à surveiller : <b>${S.tot.v + S.tot.j}</b> (${pct('v') + pct('j')} %)</span><span>Défauts + non présents : <b>${S.tot.r + S.tot.g}</b> (${pct('r') + pct('g')} %)</span></div>
     ${S.tot.a ? `<p class="ghost">${face('a', 16)} ${S.tot.a} point(s) absent(s) du site : non comptés, sans effet sur la note.</p>` : ''}
     <h2>Répartition par famille</h2>
     <table><thead><tr><th>Famille</th>${ORDER.map(s => `<th class="n">${face(s, 18)}</th>`).join('')}</tr></thead><tbody>${Object.entries(S.fams).map(([f, c]) => `<tr><td>${esc(f)}</td>${ORDER.map(s => `<td class="n">${c[s]}</td>`).join('')}</tr>`).join('')}</tbody></table>
     <h2>${face('r', 24)} Points en défaut (${S.tot.r})</h2>${lst(S.reds, 'r')}
     <h2>${face('j', 24)} Points à surveiller (${S.tot.j})</h2>${lst(S.yel, 'j')}
+    <h2>${face('g', 24)} Points non présents (${S.tot.g})</h2>${lst(S.miss, 'g')}
     <h2>Commentaire général</h2>
-    ${stateRow('etatProcess', 'État général du process', ro)}${stateRow('etatMoteur', 'État général du ou des moteurs', ro)}
+    ${processCard(a, S, ro)}${stateRow('etatMoteur', 'État général du ou des moteurs', ro)}
     <textarea style="min-height:140px" ${ro ? 'disabled' : ''} data-inp="general" placeholder="Commentaire général libre…">${esc(a.general || '')}</textarea>
     <hr class="rule">
     <button class="btn main" data-act="pdf">${ro ? 'Réexporter le PDF' : 'Générer le PDF'}</button>
@@ -425,6 +440,7 @@ async function buildPdf(a) {
       if (s === 'v') yy = cy + r * .15 + r * .3 * (1 - t * t); if (s === 'r') yy = cy + r * .55 - r * .3 * (1 - t * t); pts.push([x, yy]); }
     for (let i = 1; i < pts.length; i++) doc.line(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]);
   };
+  const stripe = (x, yy, w, h, c1, c2) => { if (w <= 0) return; doc.saveGraphicsState(); doc.rect(x, yy, w, h, null); doc.clip(); doc.discardPath(); doc.setFillColor(...c1); doc.rect(x, yy, w, h, 'F'); doc.setDrawColor(...c2); doc.setLineWidth(4.5); for (let i = -h; i < w + h; i += 10) doc.line(x + i, yy + h + 2, x + i + h + 2, yy - 2); doc.restoreGraphicsState(); };
   const title = (num, txt, sub) => { ensure(60); T(num + '. ' + txt, M, y + 16, { b: 1, z: 18, c: C.g }); y += 24; if (sub) { T(sub, M, y + 8, { z: 10, c: C.s }); y += 14; } doc.setDrawColor(...C.f); doc.setLineWidth(.8); doc.line(M, y + 4, M + CW, y + 4); y += 16; };
   const sectionTitle = txt => { ensure(40); T(txt, M, y + 12, { b: 1, z: 12, c: C.g }); y += 22; };
   // Tableau générique : cols = [largeur…], rows = [{cells:[texte | {face,label}], fill, bold, group}]
@@ -463,21 +479,33 @@ async function buildPdf(a) {
   ORDER.forEach((s, i) => { const x = M + i * (bw + 10); fill(C.l, x, y, bw, 92, 8); drawFace(s, x + 22, y + 22, 10);
     T(String(S.tot[s]), x + 12, y + 66, { b: 1, z: 30, c: C.g }); T(ST[s].label, x + 12, y + 80, { b: 1, z: 9 }); T((S.n ? Math.round(100 * S.tot[s] / S.n) : 0) + ' %', x + bw - 10, y + 80, { z: 9, c: C.s, a: 'right' }); });
   y += 108;
-  let bx = M; ORDER.forEach(s => { const w = S.n ? CW * S.tot[s] / S.n : 0; if (w > 0) fill(hex(ST[s].color), bx, y, w, 14); bx += w; }); if (!S.n) fill(C.f, M, y, CW, 14); y += 30;
-  if (S.tot.a) { T(`${S.tot.a} point(s) absent(s) du site : non comptés, sans effet sur la note.`, M, y - 8, { i: 1, z: 9, c: C.s }); y += 10; }
+  let bx = M; ORDER.forEach(s => { const w = S.n ? CW * S.tot[s] / S.n : 0; if (w > 0) fill(hex(ST[s].color), bx, y, w, 14); bx += w; }); if (!S.n) fill(C.f, M, y, CW, 14); y += 22;
+  const w1 = S.n ? CW * (S.tot.v + S.tot.j) / S.n : 0; if (!S.n) fill(C.f, M, y, CW, 14);
+  stripe(M, y, w1, 14, hex(ST.v.color), hex(ST.j.color)); stripe(M + w1, y, S.n ? CW - w1 : 0, 14, hex(ST.g.color), hex(ST.r.color)); y += 28;
+  const pc = k => S.n ? Math.round(100 * S.tot[k] / S.n) : 0;
+  T(`Conformes + à surveiller : ${S.tot.v + S.tot.j} (${pc('v') + pc('j')} %)`, M, y - 6, { z: 9, b: 1, c: C.g }); T(`Défauts + non présents : ${S.tot.r + S.tot.g} (${pc('r') + pc('g')} %)`, M + CW, y - 6, { z: 9, b: 1, c: C.g, a: 'right' }); y += 14;
+  if (S.tot.a) { T(`${S.tot.a} point(s) absent(s) du site : non comptés, sans effet sur la note.`, M, y - 4, { i: 1, z: 9, c: C.s }); y += 12; }
   sectionTitle('Répartition par famille');
   table([CW - 4 * 62, 62, 62, 62, 62], ['Famille', 'Conforme', 'À surveiller', 'Défaut', 'Non présent'], Object.entries(S.fams).map(([f, c]) => ({ cells: [f, ...ORDER.map(s => String(c[s]))] })));
   const lstRows = arr => arr.flatMap(g => [{ group: g.eq }, ...g.pts.map(p => ({ cells: [p.label, p.obs || '—'] }))]);
   sectionTitle(`Points en défaut (${S.tot.r})`); S.reds.length ? table([200, CW - 200], ['Point', 'Observation'], lstRows(S.reds)) : (T('Aucun point en défaut.', M, y + 10, { i: 1, c: C.s }), y += 24);
   sectionTitle(`Points à surveiller (${S.tot.j})`); S.yel.length ? table([200, CW - 200], ['Point', 'Observation'], lstRows(S.yel)) : (T('Aucun point à surveiller.', M, y + 10, { i: 1, c: C.s }), y += 24);
+  sectionTitle(`Points non présents (${S.tot.g})`); S.miss.length ? table([200, CW - 200], ['Point', 'Observation'], lstRows(S.miss)) : (T('Aucun point non présent.', M, y + 10, { i: 1, c: C.s }), y += 24);
 
   /* 2. Commentaire général */
   newPage(); title(2, 'Commentaire général');
-  for (const [k, lab] of [['etatProcess', 'État général du process'], ['etatMoteur', 'État général du ou des moteurs']]) {
-    const v = a[k]; if (!v.s && !v.o) continue; const l = wrap(v.o || '', CW - 24, 10); const h = 30 + l.length * 13; ensure(h + 8);
-    fill(C.l, M, y, CW, h, 8); T(lab, M + 12, y + 18, { b: 1, c: C.g, z: 10.5 }); if (v.s) { drawFace(v.s, M + CW - 100, y + 14, 7); T(ST[v.s].label, M + CW - 88, y + 17.5, { b: 1, z: 9 }); }
-    l.forEach((ln, i) => T(ln, M + 12, y + 34 + i * 13, { z: 10 })); y += h + 8;
-  }
+  { const sc = score(S), l = wrap(a.etatProcess.o || '', CW - 24, 10), h = 78 + l.length * 13; ensure(h + 8);
+    fill(C.l, M, y, CW, h, 8); T('État général du process', M + 12, y + 20, { b: 1, c: C.g, z: 10.5 });
+    T(sc == null ? '—' : fmtScore(sc) + ' / 20', M + CW - 12, y + 22, { b: 1, z: 15, c: C.g, a: 'right' });
+    const gx = M + 12, gw = CW - 24, gy = y + 36, stops = [[211, 47, 47], [235, 92, 55], [242, 176, 30], [46, 158, 87]];
+    for (let k = 0; k < 60; k++) { const t = k / 59 * 3, i = Math.min(2, Math.floor(t)), f = t - i; fill(stops[i].map((c, n) => Math.round(c + (stops[i + 1][n] - c) * f)), gx + gw * k / 60, gy, gw / 60 + .6, 9); }
+    if (sc != null) { const mx = gx + gw * sc / 20; doc.setFillColor(...C.g); doc.triangle(mx - 5, gy - 7, mx + 5, gy - 7, mx, gy + 1, 'F'); doc.setDrawColor(...C.g); doc.setLineWidth(2); doc.line(mx, gy - 1, mx, gy + 12); }
+    T('0', gx, gy + 22, { z: 8, c: C.s }); T('10', gx + gw / 2, gy + 22, { z: 8, c: C.s, a: 'center' }); T('20', gx + gw, gy + 22, { z: 8, c: C.s, a: 'right' });
+    T('Note calculée automatiquement : conforme = 1, à surveiller = 0,5, défaut = 0,25, non présent = 0 ; points absents exclus.', M + 12, y + 66, { i: 1, z: 7.5, c: C.s });
+    l.forEach((ln, i) => T(ln, M + 12, y + 80 + i * 13, { z: 10 })); y += h + 8; }
+  { const v = a.etatMoteur; if (v.s || v.o) { const l = wrap(v.o || '', CW - 24, 10), h = 30 + l.length * 13; ensure(h + 8);
+    fill(C.l, M, y, CW, h, 8); T('État général du ou des moteurs', M + 12, y + 18, { b: 1, c: C.g, z: 10.5 }); if (v.s) { drawFace(v.s, M + CW - 100, y + 14, 7); T(ST[v.s].label, M + CW - 88, y + 17.5, { b: 1, z: 9 }); }
+    l.forEach((ln, i) => T(ln, M + 12, y + 34 + i * 13, { z: 10 })); y += h + 8; } }
   const gl = wrap(a.general || 'Aucun commentaire général.', CW, 10.5);
   gl.forEach(ln => { ensure(16); T(ln, M, y + 12, { z: 10.5, i: !a.general, c: a.general ? C.t : C.s }); y += 15; });
 
@@ -529,7 +557,8 @@ const saveTpl = () => setMeta('template', tpl);
 async function vSettings() {
   shell('Paramétrage', '/'); tpl = await getTpl();
   const mv = (arr, i, d) => `<button data-act="mv" data-i="${i}" data-d="-1" ${i === 0 ? 'disabled' : ''}>▲</button><button data-act="mv" data-i="${i}" data-d="1" ${i === arr.length - 1 ? 'disabled' : ''}>▼</button>`;
-  main.innerHTML = `<h1>Paramétrage</h1><p class="sub">Modèle utilisé pour les <b>nouveaux</b> audits. Les audits déjà créés ne changent pas.</p>
+  main.innerHTML = `<h1>Paramétrage</h1><label class="f">Nom de l'auditeur (proposé pour chaque nouvel audit)</label><input type="text" data-inp="aud" value="${esc(ls.get('auditeur') || 'Alexandre Zilliox')}" autocomplete="off">
+  <h2>Modèle d'audit</h2><p class="sub">Utilisé pour les <b>nouveaux</b> audits. Les audits déjà créés ne changent pas.</p>
   <div class="ed">${tpl.map((f, fi) => `<details data-key="${f.id}" ${openSet.has(f.id) ? 'open' : ''}><summary>${esc(f.name)}</summary>
     <div class="it"><input type="text" value="${esc(f.name)}" data-chg="rn" data-p="${fi}"><span data-path="${fi}">${mv(tpl, fi).replace(/data-i="\d+"/g, `data-p="${fi}"`)}</span><button data-act="del" data-p="${fi}">✕</button></div>
     ${f.eqs.map((e, ei) => `<details data-key="${e.id}" ${openSet.has(e.id) ? 'open' : ''}><summary>${esc(e.name)}</summary>
@@ -544,6 +573,7 @@ async function vSettings() {
   main.querySelectorAll('details').forEach(d => d.addEventListener('toggle', () => d.open ? openSet.add(d.dataset.key) : openSet.delete(d.dataset.key)));
 }
 const getAt = p => { const k = p === '' ? [] : String(p).split('.').map(Number); let arr = tpl, key = ['eqs', 'pts']; for (let d = 0; d < k.length - 1; d++) arr = arr[k[d]][key[d]]; return { arr, i: k[k.length - 1], depth: k.length }; };
+inps.aud = t => ls.set('auditeur', t.value.trim());
 inps.rn = t => { const { arr, i, depth } = getAt(t.dataset.p); if (depth === 3) arr[i].label = t.value; else arr[i].name = t.value; saveTpl(); };
 acts.mv = b => { const { arr, i } = getAt(b.dataset.p), j = i + +b.dataset.d; if (j < 0 || j >= arr.length) return; [arr[i], arr[j]] = [arr[j], arr[i]]; saveTpl().then(vSettings); };
 acts.del = b => { const { arr, i, depth } = getAt(b.dataset.p); const nm = arr[i].name || arr[i].label; if (!confirm(`Supprimer « ${nm} » du modèle ?`)) return; arr.splice(i, 1); saveTpl().then(vSettings); };
